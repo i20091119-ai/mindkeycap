@@ -2,8 +2,9 @@
   감정 얼굴 이모지 생성기 (마음 키캡 만들기용) - app.js (FULL)
   - API 키/서버/DB 없이 동작 (정적 배포 / GitHub Pages OK)
   - 생성형 AI 금지: SVG 부품 조합
-  - ✅ 5단계(완성)는 PNG 미리보기로 표시(배경 누락 문제 방지)
-  - ✅ A4(2x2) 인쇄용 기능/미리보기 제거
+  - ✅ 상단 단계 pill 클릭 이동 지원
+  - ✅ ⑤단계는 PNG 미리보기로 항상 표시(배경 누락/빈 화면 방지)
+  - ✅ A4(2x2) 기능/미리보기 제거(숨김 + 로직 비활성)
 ========================================================= */
 
 /* =========================
@@ -144,7 +145,6 @@ const state = {
     customStrategy: "",
   },
 
-  // ✅ 5단계 미리보기/저장에 쓰는 PNG 캐시
   finalPngDataURL: null,
 };
 
@@ -191,13 +191,19 @@ function cacheDom(){
 
     btnReset: $("#btnReset"),
 
-    // (있으면 숨길 A4 관련)
+    // A4 관련(있으면 숨김)
     btnMakeA4: $("#btnMakeA4"),
     a4Canvas: $("#a4Canvas"),
     btnSaveA4PNG: $("#btnSaveA4PNG"),
   };
 
-  const must = ["emotionCategoryGrid","emotionDetailGrid","toStep2","questionList","miniPreview","btnMakeExamples","finalKeycap","btnSavePNG"];
+  const must = [
+    "emotionCategoryGrid","emotionDetailGrid","toStep2",
+    "questionList","miniPreview","btnMakeExamples",
+    "exampleGrid","toStep4",
+    "keycapPreview","colorPalette","colorPicker","strategyGrid","customStrategy","toStep5",
+    "finalKeycap","btnSavePNG"
+  ];
   for(const k of must){
     if(!el[k]) throw new Error(`필수 요소(#${k})를 찾지 못했어요. index.html id를 확인하세요.`);
   }
@@ -243,30 +249,20 @@ function showFatalError(err){
    A4 UI 숨기기(기능 제거)
 ========================= */
 function hideA4UI(){
-  // 버튼/캔버스 자체 숨김
   if(el.btnMakeA4) el.btnMakeA4.style.display = "none";
   if(el.btnSaveA4PNG) el.btnSaveA4PNG.style.display = "none";
   if(el.a4Canvas) el.a4Canvas.style.display = "none";
 
-  // A4 미리보기 영역(부모 컨테이너)도 최대한 숨김 시도
-  const tryHide = (node)=>{
-    if(!node) return;
-    // 가장 가까운 카드/패널 비슷한 것부터 숨김
-    const c1 = node.closest(".panel, .card, .box, .right, .a4, [data-a4]");
-    if(c1) { c1.style.display = "none"; return; }
-    // 못 찾으면 부모 2~3단계 올려서 숨김
-    let p = node.parentElement;
-    for(let i=0;i<3 && p;i++){
-      if(p.querySelector && (p.querySelector("#a4Canvas") || p.textContent?.includes("A4") || p.textContent?.includes("인쇄용"))){
-        p.style.display = "none";
-        return;
-      }
-      p = p.parentElement;
-    }
-  };
-  tryHide(el.a4Canvas);
-  tryHide(el.btnMakeA4);
-  tryHide(el.btnSaveA4PNG);
+  // 오른쪽 A4 박스 전체도 숨김 시도
+  const a4Box = el.a4Canvas?.closest(".a4-box");
+  if(a4Box) a4Box.style.display = "none";
+
+  // 최종 화면의 2열 레이아웃이면 오른쪽 컬럼 자체를 숨김
+  if(el.a4Canvas){
+    const col = el.a4Canvas.closest(".final-grid > div");
+    // col은 왼쪽/오른쪽 중 하나일 수 있어 안전하게 a4Box가 있는 쪽의 부모를 숨김
+    if(a4Box && a4Box.parentElement) a4Box.parentElement.style.display = "none";
+  }
 }
 
 /* =========================
@@ -299,6 +295,17 @@ function setStep(step){
     5: "완성! PNG로 저장해요.",
   };
   if(el.helperHint) el.helperHint.textContent = hintMap[step] || "";
+
+  // ✅ 어떤 경로로 ⑤에 오든 완성 미리보기 렌더
+  if(step === 5){
+    Promise.resolve().then(async ()=>{
+      try { await renderFinalAsPNG(); }
+      catch(e){
+        console.error(e);
+        if(el.finalKeycap) el.finalKeycap.innerHTML = buildKeycapSVG({ size: 520 });
+      }
+    });
+  }
 }
 
 /* =========================================================
@@ -320,14 +327,14 @@ function renderEmotionCategory(){
 
       state.keycap.selectedStrategyIndex = null;
       state.keycap.customStrategy = "";
+      if(el.customStrategy) el.customStrategy.value = "";
 
       renderEmotionCategory();
       renderEmotionDetail();
       renderStrategies();
 
-      validateStep1();
-      validateStep4();
-      validateStep5();
+      validateAll();
+      state.finalPngDataURL = null;
     };
     if(state.emotionCategory === e.id) btn.classList.add("is-selected");
     el.emotionCategoryGrid.appendChild(btn);
@@ -357,14 +364,12 @@ function renderEmotionDetail(){
     btn.onclick = ()=>{
       state.emotionDetail = (state.emotionDetail === d) ? null : d;
       renderEmotionDetail();
+      validateAll();
+      state.finalPngDataURL = null;
     };
     if(state.emotionDetail === d) btn.classList.add("is-selected");
     el.emotionDetailGrid.appendChild(btn);
   });
-}
-
-function validateStep1(){
-  el.toStep2.disabled = !state.emotionCategory;
 }
 
 /* =========================================================
@@ -402,7 +407,8 @@ function renderQuestions(){
 
         renderQuestions();
         updateMiniPreview();
-        validateStep2();
+        validateAll();
+        state.finalPngDataURL = null;
       };
 
       const selected = q.multi
@@ -416,14 +422,13 @@ function renderQuestions(){
   });
 }
 
-function validateStep2(){
-  const ok = Boolean(
+function validateStep2Ready(){
+  return Boolean(
     state.answers.eyes &&
     state.answers.brows &&
     state.answers.mouth &&
     state.answers.effects.size > 0
   );
-  el.btnMakeExamples.disabled = !ok;
 }
 
 /* =========================================================
@@ -461,7 +466,6 @@ function buildEmojiSVG(params, variant, size=220){
   const faceR = 92;
 
   const k = (intensity - 1) / 4; // 0~1
-
   const faceFill = "#FFE7A8";
   const line = "#1B2430";
 
@@ -600,7 +604,7 @@ function buildEmojiSVG(params, variant, size=220){
     return `<path d="${d}" fill="none" stroke="${line}" stroke-width="${stroke}" stroke-linecap="round"/>`;
   })();
 
-  // ✅ 효과 레이어 분리: under(볼홍조/눈물) + over(땀)
+  // 효과 레이어(under + over)
   const { effectsUnderSVG, effectsOverSVG } = (() => {
     const set = new Set(effects || []);
     if(set.has("none")) return { effectsUnderSVG:"", effectsOverSVG:"" };
@@ -628,7 +632,7 @@ function buildEmojiSVG(params, variant, size=220){
       const shift = t.effectShift;
       const dropSize = 10 + 8*k;
       const x = cx + 56 - shift*2;
-      const y = cy - 72 + shift*2; // 살짝 위로
+      const y = cy - 74 + shift*2; // 위쪽(눈썹 위)
       over.push(tearDropPath(x, y, dropSize, "#68D6FF", 0.92));
     }
 
@@ -659,7 +663,7 @@ function buildEmojiSVG(params, variant, size=220){
 function updateMiniPreview(){
   el.miniPreview.innerHTML = "";
 
-  const ok = Boolean(state.answers.eyes && state.answers.brows && state.answers.mouth && state.answers.effects.size > 0);
+  const ok = validateStep2Ready();
   if(!ok){
     el.miniPreview.innerHTML = `<div style="color:rgba(24,34,53,.6); font-weight:900;">선택 중…</div>`;
     return;
@@ -695,7 +699,7 @@ function makeExamples(){
 
   state.selectedExampleIndex = null;
   renderExamples();
-  validateStep3();
+  validateAll();
 }
 
 function renderExamples(){
@@ -713,12 +717,10 @@ function renderExamples(){
 
     const pick = ()=>{
       state.selectedExampleIndex = idx;
+      state.finalPngDataURL = null;
       renderExamples();
-      validateStep3();
-
       renderKeycapPreview();
-      validateStep4();
-      validateStep5();
+      validateAll();
     };
 
     card.onclick = pick;
@@ -734,13 +736,8 @@ function renderExamples(){
   });
 }
 
-function validateStep3(){
-  el.toStep4.disabled = (state.selectedExampleIndex === null);
-}
-
 /* =========================================================
-   STEP 4: 키캡 SVG
-   - ✅ 표정(이모지) 크게 보이도록
+   STEP 4/5: 키캡 SVG
 ========================================================= */
 function getSelectedEmotionLabel(){
   const cat = EMOTIONS.find(x=>x.id === state.emotionCategory);
@@ -749,7 +746,7 @@ function getSelectedEmotionLabel(){
 }
 
 function getStrategyText(){
-  const custom = state.keycap.customStrategy.trim();
+  const custom = (state.keycap.customStrategy || "").trim();
   if(custom) return custom;
 
   const arr = STRATEGIES[state.emotionCategory] || [];
@@ -799,7 +796,6 @@ function buildKeycapSVG({ size=520 } = {}){
       </linearGradient>
     </defs>
 
-    <!-- ✅ 키캡 배경(이게 5단계에서 반드시 보여야 함) -->
     <rect x="${pad}" y="${pad}" width="${w-pad*2}" height="${h-pad*2}"
           rx="${rx}" ry="${rx}"
           fill="${bg}" stroke="rgba(24,34,53,0.18)" stroke-width="3"
@@ -835,12 +831,11 @@ function renderKeycapPreview(){
     el.keycapPreview.innerHTML = `<div style="color:rgba(24,34,53,.6); font-weight:900;">예시를 먼저 선택해요.</div>`;
     return;
   }
-  // 4단계는 SVG로 보여도 OK
   el.keycapPreview.innerHTML = buildKeycapSVG({ size: 520 });
 }
 
 /* =========================================================
-   STEP 4: 색/전략 렌더
+   STEP 4: 팔레트/전략 렌더
 ========================================================= */
 function renderColorPalette(){
   el.colorPalette.innerHTML = "";
@@ -855,8 +850,8 @@ function renderColorPalette(){
       el.colorPicker.value = c;
       renderColorPalette();
       renderKeycapPreview();
-      state.finalPngDataURL = null; // 캐시 무효화
-      validateStep5();
+      state.finalPngDataURL = null;
+      validateAll();
     };
     if(state.keycap.bgColor.toLowerCase() === c.toLowerCase()) chip.classList.add("is-selected");
     el.colorPalette.appendChild(chip);
@@ -881,13 +876,11 @@ function renderStrategies(){
       state.keycap.selectedStrategyIndex = idx;
       state.keycap.customStrategy = "";
       el.customStrategy.value = "";
+      state.finalPngDataURL = null;
 
       renderStrategies();
-      validateStep4();
-
       renderKeycapPreview();
-      state.finalPngDataURL = null; // 캐시 무효화
-      validateStep5();
+      validateAll();
     };
 
     card.onclick = pick;
@@ -903,14 +896,8 @@ function renderStrategies(){
   });
 }
 
-function validateStep4(){
-  const hasEmoji = (state.selectedExampleIndex !== null);
-  const hasStrategy = Boolean(getStrategyText().trim());
-  el.toStep5.disabled = !(hasEmoji && hasStrategy && state.emotionCategory);
-}
-
 /* =========================================================
-   SVG → PNG (안정형: data:image/svg+xml 인코딩 방식)
+   SVG → PNG (안정형)
 ========================================================= */
 function loadImage(src){
   return new Promise((resolve, reject)=>{
@@ -947,27 +934,9 @@ async function svgToPngDataURL(svgString, outW, outH, scale=2){
 }
 
 /* =========================================================
-   STEP 5: 완성 화면은 PNG 미리보기로 렌더(배경 누락 방지)
+   STEP 5: 최종 렌더(항상 PNG 미리보기)
 ========================================================= */
-async function renderFinalAsPNG(){
-  if(state.selectedExampleIndex === null) return;
-  if(!getStrategyText().trim()) return;
-
-  // 이미 만든 PNG가 있고, 값이 바뀐 게 없으면 그대로 사용
-  if(state.finalPngDataURL){
-    paintFinalImage(state.finalPngDataURL);
-    return;
-  }
-
-  const svg = buildKeycapSVG({ size: 900 });
-  const dataURL = await svgToPngDataURL(svg, 900, 900, 2.5);
-
-  state.finalPngDataURL = dataURL;
-  paintFinalImage(dataURL);
-}
-
 function paintFinalImage(dataURL){
-  // ✅ 5단계에서 “표정만 보이는” 문제를 막기 위해 img로 표시
   el.finalKeycap.innerHTML = `
     <img
       src="${dataURL}"
@@ -977,9 +946,47 @@ function paintFinalImage(dataURL){
   `;
 }
 
-function validateStep5(){
-  const ok = Boolean(state.emotionCategory && state.selectedExampleIndex !== null && getStrategyText().trim());
-  el.btnSavePNG.disabled = !ok;
+async function renderFinalAsPNG(){
+  // ✅ 필수값 체크
+  if(state.selectedExampleIndex === null) {
+    el.finalKeycap.innerHTML = `<div style="color:rgba(24,34,53,.6); font-weight:900;">예시를 먼저 골라야 해요.</div>`;
+    return;
+  }
+  if(!getStrategyText().trim()){
+    el.finalKeycap.innerHTML = `<div style="color:rgba(24,34,53,.6); font-weight:900;">전략을 먼저 골라야 해요.</div>`;
+    return;
+  }
+
+  if(state.finalPngDataURL){
+    paintFinalImage(state.finalPngDataURL);
+    return;
+  }
+
+  const svg = buildKeycapSVG({ size: 900 });
+  const dataURL = await svgToPngDataURL(svg, 900, 900, 2.5);
+  state.finalPngDataURL = dataURL;
+  paintFinalImage(dataURL);
+}
+
+/* =========================================================
+   검증/버튼 활성화
+========================================================= */
+function validateAll(){
+  // step1
+  el.toStep2.disabled = !state.emotionCategory;
+
+  // step2
+  el.btnMakeExamples.disabled = !validateStep2Ready();
+
+  // step3
+  el.toStep4.disabled = (state.selectedExampleIndex === null);
+
+  // step4
+  const hasStrategy = Boolean(getStrategyText().trim());
+  el.toStep5.disabled = !(state.emotionCategory && state.selectedExampleIndex !== null && hasStrategy);
+
+  // step5 save
+  el.btnSavePNG.disabled = !(state.emotionCategory && state.selectedExampleIndex !== null && hasStrategy);
 }
 
 /* =========================================================
@@ -991,16 +998,16 @@ function bindEvents(){
     setStep(2);
     renderQuestions();
     updateMiniPreview();
-    validateStep2();
+    validateAll();
   });
 
-  // Back
+  // back buttons
   el.btnBackTo1?.addEventListener("click", ()=> setStep(1));
   el.btnBackTo2?.addEventListener("click", ()=>{
     setStep(2);
     renderQuestions();
     updateMiniPreview();
-    validateStep2();
+    validateAll();
   });
   el.btnBackTo3?.addEventListener("click", ()=> setStep(3));
   el.btnBackTo4?.addEventListener("click", ()=> setStep(4));
@@ -1010,7 +1017,8 @@ function bindEvents(){
     state.answers.intensity = Number(el.intensitySlider.value);
     el.intensityValue.textContent = String(state.answers.intensity);
     updateMiniPreview();
-    state.finalPngDataURL = null; // 바뀌면 캐시 무효화
+    state.finalPngDataURL = null;
+    validateAll();
   });
 
   // make examples
@@ -1025,10 +1033,10 @@ function bindEvents(){
     renderColorPalette();
     renderStrategies();
     renderKeycapPreview();
-    validateStep4();
+    validateAll();
   });
 
-  // shape segmented buttons (있으면)
+  // shape segmented buttons
   $$(".segbtn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const shape = btn.getAttribute("data-shape");
@@ -1042,6 +1050,7 @@ function bindEvents(){
 
       renderKeycapPreview();
       state.finalPngDataURL = null;
+      validateAll();
     });
   });
 
@@ -1051,32 +1060,25 @@ function bindEvents(){
     renderColorPalette();
     renderKeycapPreview();
     state.finalPngDataURL = null;
+    validateAll();
   });
 
   // custom strategy
   el.customStrategy.addEventListener("input", ()=>{
     state.keycap.customStrategy = el.customStrategy.value;
-    // 커스텀 전략을 쓰면 카드 선택은 의미가 줄어드니 유지하되, 표시 텍스트는 커스텀 우선
-    validateStep4();
-    renderKeycapPreview();
     state.finalPngDataURL = null;
-    validateStep5();
+    renderKeycapPreview();
+    validateAll();
   });
 
   // step4 -> step5
-  el.toStep5.addEventListener("click", async ()=>{
+  el.toStep5.addEventListener("click", ()=>{
     setStep(5);
-    validateStep5();
-    try{
-      await renderFinalAsPNG();
-    } catch (e){
-      console.error(e);
-      // 그래도 최소한 SVG로라도 보여주기(최후 안전망)
-      el.finalKeycap.innerHTML = buildKeycapSVG({ size: 520 });
-    }
+    validateAll();
+    // renderFinalAsPNG는 setStep 내부에서도 호출됨(중복 호출 방지용 캐시 있음)
   });
 
-  // save PNG (항상 PNG 데이터로 저장)
+  // save PNG
   el.btnSavePNG.addEventListener("click", async ()=>{
     try{
       if(!state.finalPngDataURL){
@@ -1084,7 +1086,7 @@ function bindEvents(){
       }
       const fname = `마음키캡_${getSelectedEmotionLabel()}_강도${state.answers.intensity}.png`;
       downloadDataURL(state.finalPngDataURL, fname);
-    } catch (e){
+    } catch(e){
       console.error(e);
       alert("저장 중 문제가 생겼어요 (키캡 PNG).");
     }
@@ -1092,13 +1094,40 @@ function bindEvents(){
 
   // reset
   el.btnReset?.addEventListener("click", resetAll);
+
+  // ✅ 상단 단계 pill 클릭 이동 + 렌더
+  if(el.stepPills && el.stepPills.length){
+    el.stepPills.forEach(pill=>{
+      pill.style.cursor = "pointer";
+      pill.addEventListener("click", ()=>{
+        const n = Number(pill.getAttribute("data-step"));
+        if(!n) return;
+
+        // 단계 점프 안전장치
+        if(n >= 2 && !state.emotionCategory) return;
+        if(n >= 3 && !validateStep2Ready()) return;
+        if(n >= 4 && state.selectedExampleIndex === null) return;
+        if(n >= 5 && !(state.selectedExampleIndex !== null && getStrategyText().trim())) return;
+
+        setStep(n);
+
+        if(n === 2){ renderQuestions(); updateMiniPreview(); }
+        if(n === 3){ renderExamples(); }
+        if(n === 4){ renderColorPalette(); renderStrategies(); renderKeycapPreview(); }
+        // n===5는 setStep에서 renderFinalAsPNG 자동 호출
+        validateAll();
+      });
+    });
+  }
+
+  // ✅ A4 버튼이 남아있어도 절대 동작하지 않게
+  el.btnMakeA4?.addEventListener("click", (e)=>{ e.preventDefault(); });
+  el.btnSaveA4PNG?.addEventListener("click", (e)=>{ e.preventDefault(); });
 }
 
 /* =========================================================
    Reset / Init
 ========================================================= */
-function validateStep3(){ el.toStep4.disabled = (state.selectedExampleIndex === null); }
-
 function resetAll(){
   state.step = 1;
   state.emotionCategory = null;
@@ -1127,6 +1156,7 @@ function resetAll(){
   el.customStrategy.value = "";
 
   setStep(1);
+
   renderEmotionCategory();
   renderEmotionDetail();
 
@@ -1139,16 +1169,12 @@ function resetAll(){
   renderColorPalette();
   renderStrategies();
 
-  validateStep1();
-  validateStep2();
-  validateStep3();
-  validateStep4();
-  validateStep5();
+  validateAll();
 }
 
 function init(){
   cacheDom();
-  hideA4UI(); // ✅ A4 기능 제거(화면에서도 숨김)
+  hideA4UI();
 
   setStep(1);
 
@@ -1160,12 +1186,7 @@ function init(){
   el.intensitySlider.value = String(state.answers.intensity);
   el.intensityValue.textContent = String(state.answers.intensity);
 
-  validateStep1();
-  validateStep2();
-  validateStep3();
-  validateStep4();
-  validateStep5();
-
+  validateAll();
   bindEvents();
 }
 
