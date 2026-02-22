@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>감정 얼굴 이모지 생성기 (마음 키캡 만들기용)</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">😊</div>
+      <div>
+        <h1>감정 얼굴 이모지 생성기</h1>
+        <p class="subtitle">(마음 키캡 만들기용)</p>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btnReset" class="btn btn-ghost" type="button" title="처음부터 다시하기">
+        ↺ 리셋
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- 진행 단계 -->
+    <section class="progress" aria-label="진행 단계">
+      <div class="steps" role="list">
+        <div class="step-pill is-active" data-step="1" role="listitem">① 감정선택</div>
+        <div class="step-pill" data-step="2" role="listitem">② 질문응답</div>
+        <div class="step-pill" data-step="3" role="listitem">③ 예시선택</div>
+        <div class="step-pill" data-step="4" role="listitem">④ 키캡/전략</div>
+        <div class="step-pill" data-step="5" role="listitem">⑤ 저장/인쇄</div>
+      </div>
+      <div class="progressbar" aria-hidden="true">
+        <div id="progressFill" class="progressbar-fill"></div>
+      </div>
+      <p class="hint" id="helperHint">
+        감정은 나쁜 게 아니라 내 마음의 신호야. 키캡은 감정을 없애는 버튼이 아니라 조절을 시작하는 버튼이야.
+      </p>
+    </section>
+
+    <!-- STEP 1: 감정 선택 -->
+    <section class="panel" id="step1" data-step-panel="1">
+      <h2 class="panel-title">① 표현하고 싶은 감정을 골라요</h2>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3 class="card-title">감정 카테고리</h3>
+          <div id="emotionCategoryGrid" class="choice-grid" aria-label="감정 카테고리 선택"></div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">세부 단어(선택)</h3>
+          <p class="card-desc">원하면 하나 더 구체적으로 골라요(안 골라도 OK).</p>
+          <div id="emotionDetailGrid" class="choice-grid" aria-label="감정 세부 단어 선택"></div>
+        </div>
+      </div>
+
+      <div class="panel-actions">
+        <button id="toStep2" class="btn btn-primary" type="button" disabled>다음(질문으로) →</button>
+      </div>
+    </section>
+
+    <!-- STEP 2: 질문 응답 -->
+    <section class="panel is-hidden" id="step2" data-step-panel="2">
+      <h2 class="panel-title">② 얼굴을 조립해요 (질문에 답하기)</h2>
+
+      <div class="card">
+        <div class="q-header">
+          <div>
+            <h3 class="card-title">질문 1~5</h3>
+            <p class="card-desc">아이콘을 눌러 골라요. (얼굴 효과는 여러 개 선택 가능)</p>
+          </div>
+          <button id="btnBackTo1" class="btn btn-ghost" type="button">← 감정 다시</button>
+        </div>
+
+        <div id="questionList" class="question-list" aria-label="얼굴 질문 목록"></div>
+
+        <div class="divider"></div>
+
+        <div class="row">
+          <div class="slider-wrap">
+            <label class="label" for="intensitySlider">Q5. 감정 강도 (1~5)</label>
+            <input id="intensitySlider" type="range" min="1" max="5" value="3" step="1" />
+            <div class="slider-value" aria-live="polite">
+              현재 강도: <span id="intensityValue">3</span>
+            </div>
+          </div>
+
+          <div class="preview-mini">
+            <div class="mini-title">미리보기</div>
+            <div id="miniPreview" class="mini-preview-box" aria-label="얼굴 미리보기"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-actions">
+        <button id="btnMakeExamples" class="btn btn-primary" type="button" disabled>예시 만들기 ✨</button>
+      </div>
+    </section>
+
+    <!-- STEP 3: 예시 선택 -->
+    <section class="panel is-hidden" id="step3" data-step-panel="3">
+      <h2 class="panel-title">③ 마음에 드는 예시 1개를 골라요</h2>
+
+      <div class="card">
+        <div class="q-header">
+          <div>
+            <h3 class="card-title">예시 4개</h3>
+            <p class="card-desc">카드를 눌러 선택하면 테두리와 체크가 생겨요.</p>
+          </div>
+          <button id="btnBackTo2" class="btn btn-ghost" type="button">← 질문 다시</button>
+        </div>
+
+        <div id="exampleGrid" class="example-grid" aria-label="이모지 예시 목록"></div>
+
+        <div class="panel-actions">
+          <button id="toStep4" class="btn btn-primary" type="button" disabled>선택 완료(키캡 꾸미기) →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 4: 키캡 꾸미기 + 전략 -->
+    <section class="panel is-hidden" id="step4" data-step-panel="4">
+      <h2 class="panel-title">④ 키캡을 꾸미고, 나의 전략을 골라요</h2>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="q-header">
+            <div>
+              <h3 class="card-title">내 키캡 디자인</h3>
+              <p class="card-desc">배경색과 모양을 고를 수 있어요.</p>
+            </div>
+            <button id="btnBackTo3" class="btn btn-ghost" type="button">← 예시 다시</button>
+          </div>
+
+          <div class="row wrap">
+            <div class="field">
+              <label class="label">키캡 모양</label>
+              <div class="segmented" role="radiogroup" aria-label="키캡 모양 선택">
+                <button class="segbtn is-active" type="button" data-shape="roundrect" aria-checked="true" role="radio">둥근사각형</button>
+                <button class="segbtn" type="button" data-shape="circle" aria-checked="false" role="radio">원</button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="label">배경색(프리셋)</label>
+              <div id="colorPalette" class="color-palette" aria-label="배경색 프리셋"></div>
+            </div>
+
+            <div class="field">
+              <label class="label" for="colorPicker">직접 고르기</label>
+              <input id="colorPicker" type="color" value="#FFE08A" />
+            </div>
+          </div>
+
+          <div id="keycapPreview" class="keycap-preview" aria-label="키캡 미리보기"></div>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">조절 전략 카드(카테고리별 5개)</h3>
+          <p class="card-desc">하나를 골라 “내 키캡”에 적어요.</p>
+          <div id="strategyGrid" class="strategy-grid" aria-label="조절 전략 선택"></div>
+
+          <div class="divider"></div>
+
+          <div class="field">
+            <label class="label" for="customStrategy">또는 내가 직접 쓰기(선택)</label>
+            <input id="customStrategy" class="text-input" type="text" maxlength="30" placeholder="예: 숨 고르기, 도움 요청하기..." />
+            <p class="tiny">※ 직접 쓰면, 선택한 전략보다 우선해서 표시해요.</p>
+          </div>
+
+          <div class="panel-actions">
+            <button id="toStep5" class="btn btn-primary" type="button" disabled>저장/인쇄로 →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 5: 저장/인쇄 -->
+    <section class="panel is-hidden" id="step5" data-step-panel="5">
+      <h2 class="panel-title">⑤ PNG로 저장하고 인쇄해요</h2>
+
+      <div class="card">
+        <div class="q-header">
+          <div>
+            <h3 class="card-title">완성!</h3>
+            <p class="card-desc">아래 버튼으로 PNG 저장 또는 A4 인쇄용 시트를 만들 수 있어요.</p>
+          </div>
+          <button id="btnBackTo4" class="btn btn-ghost" type="button">← 키캡 다시</button>
+        </div>
+
+        <div class="final-grid">
+          <div>
+            <div id="finalKeycap" class="final-keycap" aria-label="최종 키캡"></div>
+            <div class="final-actions">
+              <button id="btnSavePNG" class="btn btn-primary" type="button" disabled>키캡 PNG 저장</button>
+              <button id="btnMakeA4" class="btn btn-secondary" type="button" disabled>A4(2x2) 만들기</button>
+            </div>
+            <p class="tiny">
+              * 저장이 안 되면: 브라우저 팝업/다운로드 차단을 확인해 주세요.
+            </p>
+          </div>
+
+          <div>
+            <div class="a4-box">
+              <div class="a4-title">인쇄용 A4 미리보기</div>
+              <canvas id="a4Canvas" width="620" height="877" aria-label="A4 미리보기 캔버스"></canvas>
+              <div class="final-actions">
+                <button id="btnSaveA4PNG" class="btn btn-secondary" type="button" disabled>A4 PNG 저장</button>
+              </div>
+              <p class="tiny">A4는 실제 저장 시 고해상도(세로 비율)로 생성돼요.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p class="tiny">
+        © 수업용 도구(정적 웹앱). 개인정보/로그인/서버 저장 없음.
+      </p>
+    </footer>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
